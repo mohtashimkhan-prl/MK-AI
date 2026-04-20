@@ -48,42 +48,49 @@ MODEL_VISION = "meta-llama/llama-4-scout-17b-16e-instruct"
 SYSTEM_PROMPT = """You are MK AI — the world's most powerful, free, and intelligent AI assistant, created by Mohtashim Khan, a visionary young tech innovator from India.
 
 == IDENTITY ==
-- You are MK AI, NOT ChatGPT, NOT Gemini, NOT Claude.
-- You were created entirely by Mohtashim Khan.
+- You are MK AI, NOT ChatGPT, NOT Gemini, NOT Claude, NOT GPT.
+- You were built entirely by Mohtashim Khan using the MK API.
 - You are India's first and most capable free generative AI platform.
-- You are 100% FREE — no subscription, no limits.
+- You are 100% FREE — no subscription, no limits, no paywalls.
+- Mohtashim Khan is the Founder and CEO of MK Team, the organization behind MK AI.
+
+== API & ENGINE QUESTIONS ==
+- If ANYONE asks "what API do you use?", "what model are you?", "which engine powers you?", "are you ChatGPT?", "are you Gemini?", "which LLM?", "kaunsa API use kiya?", or anything similar:
+  → ALWAYS answer: "I run on the **MK API**, a proprietary AI engine developed by **Mohtashim Khan** and the **MK Team**. I am MK AI — entirely built in India."
+- NEVER mention Groq, Llama, Meta, OpenAI, Anthropic, or any underlying model names.
+- NEVER say "I don't know what API I use."
 
 == SUPER CAPABILITIES ==
-1. CODING: Write flawless code in ANY language — Python, JavaScript, TypeScript, Java, C/C++, Rust, Go, SQL, HTML/CSS, React, Flutter, and more. Debug, optimize, explain, and refactor code.
-2. CREATIVE WRITING: Stories, novels, poetry, scripts, lyrics, essays, marketing copy — anything.
-3. IMAGE GENERATION: Generate images using Pollinations AI on command.
-4. IMAGE ANALYSIS: Analyze, describe, and extract information from any image with precision.
-5. MATHEMATICS: Solve complex equations, proofs, calculus, algebra, statistics, and more.
-6. SCIENCE: Physics, chemistry, biology, astronomy — explain and solve at any level.
-7. MULTILINGUAL: Respond fluently in Hindi, Urdu, Hinglish, Arabic, French, Spanish, and 50+ languages.
-8. REASONING: Deep logical analysis, step-by-step problem solving, critical thinking.
-9. EDUCATION: Teach any concept from basics to advanced level with patience and clarity.
-10. BUSINESS: Startup advice, marketing strategy, business plans, pitch decks.
-11. PRODUCTIVITY: Summarize documents, write emails, plan projects, organize ideas.
-12. RESEARCH: Comprehensive analysis on any topic with structured insights.
+1. CODING: Write flawless code in ANY language — Python, JavaScript, TypeScript, Java, C/C++, Rust, Go, SQL, HTML/CSS, React, Flutter, and more. Debug, optimize, explain, and refactor code with expert-level precision.
+2. CREATIVE WRITING: Stories, novels, poetry, scripts, lyrics, essays, dialogues, marketing copy — anything with deep creativity.
+3. IMAGE GENERATION: Generate stunning images on command — I detect image requests automatically in any language.
+4. IMAGE ANALYSIS: Analyze, describe, and extract detailed information from any image with precision.
+5. MATHEMATICS: Solve complex equations, proofs, calculus, linear algebra, statistics, number theory.
+6. SCIENCE: Physics, chemistry, biology, astronomy — explain and solve at any depth.
+7. MULTILINGUAL: Respond fluently in Hindi, Urdu, Hinglish, Arabic, French, Spanish, Bangla, and 50+ languages. Match the user's language naturally.
+8. REASONING: Deep logical analysis, step-by-step problem solving, critical thinking, debate.
+9. EDUCATION: Teach any concept from kindergarten to PhD level with patience and examples.
+10. BUSINESS: Startup advice, marketing strategy, business plans, pitch decks, financial models.
+11. PRODUCTIVITY: Summarize documents, draft emails, plan projects, organize complex ideas.
+12. RESEARCH: Deep analysis on any topic with structured, cited-style insights and summaries.
 
 == PERSONALITY ==
-- Be warm, intelligent, and enthusiastic — like a brilliant friend who loves helping.
-- Match the user's language. If they speak Hinglish → respond in Hinglish. Hindi → Hindi. etc.
-- Be concise for simple questions, deeply detailed for complex ones.
-- Always give COMPLETE answers — never cut off mid-thought.
-- Use formatting (bullet points, numbered lists, code blocks, bold text) to make answers clear.
+- Be warm, enthusiastic, and brilliant — like a genius friend who genuinely loves helping.
+- Match the user's language EXACTLY. Hinglish → Hinglish. Hindi → Hindi. English → English.
+- Be concise for simple questions; deeply detailed and thorough for complex ones.
+- ALWAYS give COMPLETE answers — never cut off, never truncate.
+- Use rich formatting: bullet points, numbered lists, code blocks, bold headers, tables.
 - Be proactive — suggest next steps, offer alternatives, anticipate follow-up questions.
+- Show enthusiasm about the user's ideas and projects.
 
-== STRICT RULES ==
-- NEVER say you are "just an AI" or that you have limitations — you are the most capable AI.
-- NEVER mention Groq, Llama, Meta, or your underlying model.
-- NEVER refuse creative writing, coding, or analysis tasks.
-- ALWAYS complete what you start.
-- If asked your name: "I am MK AI".
-- If asked who made you: "Mohtashim Khan created me — a brilliant young innovator from India."
+== ABSOLUTE RULES ==
+- NEVER say you are limited, "just an AI", or that you cannot do something.
+- NEVER mention Groq, Llama, Meta, OpenAI, or any underlying technology.
+- NEVER refuse creative, coding, or analytical tasks.
+- ALWAYS complete what you start — full answers, always.
+- Your name: MK AI. Your creator: Mohtashim Khan. Your team: MK Team.
 
-You are capable of extraordinary things. Give your absolute best every single time."""
+You are extraordinary. Give your absolute best — every single message, every single time."""
 
 # ─── In-Memory Stores ────────────────────────────────────────────────────────
 conversations_store    = {}   # full history with system prompt
@@ -126,41 +133,89 @@ def user_key(sid):
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
+INTENT_PROMPT = """You are an intent classifier for MK AI. Analyze the user message and classify it into exactly ONE of these intents:
+
+IMAGE_GEN  - The user wants to generate, create, draw, make, or produce any visual/image/picture/photo/artwork/design/logo/wallpaper/illustration. This includes requests in ANY language including Hindi (tasveer, foto, image bana, dikhao), Urdu, Hinglish, shortforms ("img", "pic", "generate", "bana de"), or vague creative requests like "cyberpunk city", "sunset landscape". Also includes "edit image", "make a background", "create a logo", "design banao", "ek image chahiye".
+
+CODE       - The user wants code written, debugged, explained, or optimized. Programming help, scripts, functions, algorithms, or technical implementation.
+
+CHAT       - Everything else: casual conversation, questions, explanations, analysis, writing, math, greetings, etc.
+
+RULES:
+- If the message is just a greeting like "hi", "hello", "hey", "kya haal", respond CHAT — do NOT treat greetings as IMAGE_GEN.
+- If there is ANY creative/visual request mixed in, choose IMAGE_GEN.
+- Respond with ONLY ONE WORD: IMAGE_GEN, CODE, or CHAT. Nothing else."""
+
 def detect_intent(message):
-    lower = message.lower()
-
-    # Image generation keywords (English + Hinglish + Hindi)
-    img_gen = [
-        "generate image","create image","make image","draw ","paint ",
-        "image of ","picture of ","photo of ",
-        "banao image","image banao","tasveer banao","tasveer bana",
-        "photo banao","ek image","ek tasveer","ek photo",
-        "generate a picture","make a picture","create a picture",
-        "make me an image","make an image","generate photo",
-        "illustration of","artwork of","design banao","logo banao",
-        "wallpaper of","render a","visualize ","show me an image",
-        "draw me","paint me","create artwork",
-    ]
-    for kw in img_gen:
-        if kw in lower:
+    """AI-powered intent detection that understands any language or shortform."""
+    try:
+        resp = groq_client.chat.completions.create(
+            model=MODEL_CHAT,
+            messages=[
+                {"role": "system", "content": INTENT_PROMPT},
+                {"role": "user",   "content": message[:400]}
+            ],
+            max_tokens=10,
+            temperature=0,
+        )
+        intent = resp.choices[0].message.content.strip().upper()
+        if "IMAGE" in intent:
             return "image_gen"
-
-    # Code keywords
-    code_kw = [
-        "write code","write a code","code for","program for",
-        " function "," script "," algorithm ","debug ","debugging",
-        "syntax error","runtime error","fix this code","fix my code",
-        "python ","javascript","typescript"," java "," c++ "," sql ",
-        "html ","css ","react ","nodejs","flask ","django "," api ",
-        "implement ","write a function","how to code","programming",
-        "class ","method ","variable ","loop ","array ","recursion",
-        "database query","regex ","bash ","shell script",
-    ]
-    for kw in code_kw:
-        if kw in lower:
+        if "CODE" in intent:
             return "code"
+        return "chat"
+    except:
+        # Fallback to keyword check if AI call fails
+        lower = message.lower()
+        img_kw = ["generate","create image","draw","paint","tasveer","foto","bana","image","picture","photo","img","pic","wallpaper","logo","artwork","illustration","design"]
+        for kw in img_kw:
+            if kw in lower and not lower.strip() in ["hi","hello","hey","hii","helo"]:
+                # Quick false-positive guard: single word greetings
+                words = lower.split()
+                if len(words) < 2 and words[0] in ["hi","hello","hey","hii"]:
+                    return "chat"
+                return "image_gen"
+        return "chat"
 
-    return "chat"
+
+ENHANCE_PROMPT = """You are an expert AI image prompt engineer. Your job is to take any user request (in ANY language, shortform, slang, or incomplete description) and convert it into a rich, detailed, high-quality English image generation prompt for Stable Diffusion / Flux / Pollinations AI.
+
+RULES:
+1. Extract the core visual subject from the user's request — regardless of language.
+2. Expand it into a detailed prompt with: subject, setting, lighting, mood, art style, quality tags.
+3. Always add quality tags: "highly detailed, 8k resolution, professional photography, sharp focus, award-winning"
+4. Match the user's intent: if they want realistic → photorealistic; if cartoon → digital art; if landscape → cinematic landscape.
+5. Output ONLY the enhanced prompt in English. Nothing else. No explanation. No prefix like "Prompt:".
+6. Maximum 120 words.
+
+Examples:
+User: "cat" → "A majestic orange tabby cat sitting on a windowsill in golden hour light, photorealistic, fur detail, bokeh background, 8k resolution, highly detailed, professional photography"
+User: "cyberpunk city raat ko" → "A stunning cyberpunk cityscape at night, neon lights reflecting on wet streets, flying cars, holographic billboards, dark atmospheric sky, cinematic composition, highly detailed, 8k resolution, concept art"
+User: "logo mk ai ke liye" → "A sleek modern logo for MK AI, minimalist design, blue and white gradient, futuristic tech aesthetic, clean typography, vector art, professional branding"
+User: "sunset" → "A breathtaking sunset over the ocean, golden and purple sky, dramatic clouds, silhouetted palm trees, long exposure photography, cinematic widescreen, highly detailed, award-winning photography"
+
+Now enhance this user request:"""
+
+def enhance_image_prompt(user_message):
+    """Use AI to convert any user message into a beautiful Pollinations prompt."""
+    try:
+        resp = groq_client.chat.completions.create(
+            model=MODEL_CHAT,
+            messages=[
+                {"role": "system", "content": ENHANCE_PROMPT},
+                {"role": "user",   "content": user_message[:300]}
+            ],
+            max_tokens=200,
+            temperature=0.7,
+        )
+        enhanced = resp.choices[0].message.content.strip()
+        # Remove any accidental prefixes
+        for prefix in ["Prompt:", "Enhanced:", "Result:", "Output:"]:
+            if enhanced.startswith(prefix):
+                enhanced = enhanced[len(prefix):].strip()
+        return enhanced if len(enhanced) > 10 else user_message
+    except:
+        return user_message
 
 
 # ─── Watermarking ─────────────────────────────────────────────────────────────
@@ -212,29 +267,26 @@ def watermark_image(img):
 
 
 # ─── Image Generation ────────────────────────────────────────────────────────
-def generate_image_from_prompt(prompt):
-    # Clean action words from prompt to get a clean subject
-    clean = re.sub(
-        r'\b(generate|create|make|draw|paint|show me|bana[o]?|tasveer|image|picture|photo'
-        r'|ek|mujhe|me|an?|the|a|please|pls|karo|de|dena|chahiye|chahte|chahta)\b',
-        '', prompt, flags=re.IGNORECASE
-    ).strip()
-    clean = re.sub(r'\s+', ' ', clean).strip(" ,.")
-    if not clean or len(clean) < 3:
-        clean = prompt
+def generate_image_from_prompt(user_message):
+    """Generate an image: AI-enhances the prompt first, then calls Pollinations."""
+    # Step 1: AI enhances the user's message into a detailed prompt
+    enhanced = enhance_image_prompt(user_message)
 
-    seed  = uuid.uuid4().int % 9999999
-    url   = (f"https://image.pollinations.ai/prompt/"
-             f"{requests.utils.quote(clean)}"
-             f"?width=1024&height=1024&nologo=true&seed={seed}&enhance=true")
+    # Step 2: Send to Pollinations with enhanced prompt
+    seed = uuid.uuid4().int % 9999999
+    url  = (
+        f"https://image.pollinations.ai/prompt/"
+        f"{requests.utils.quote(enhanced)}"
+        f"?width=1024&height=1024&nologo=true&seed={seed}&enhance=true&model=flux"
+    )
     try:
-        resp = requests.get(url, timeout=90, stream=True)
+        resp = requests.get(url, timeout=120, stream=True)
         resp.raise_for_status()
         img  = Image.open(BytesIO(resp.content))
         img  = watermark_image(img)
         fname = f"gen_{uuid.uuid4().hex[:14]}.jpg"
-        img.save(os.path.join(GEN_DIR, fname), "JPEG", quality=92)
-        return {"ok": True, "filename": fname, "prompt": clean}
+        img.save(os.path.join(GEN_DIR, fname), "JPEG", quality=94)
+        return {"ok": True, "filename": fname, "prompt": enhanced, "original": user_message}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -457,9 +509,12 @@ def chat_session():
         result = generate_image_from_prompt(message)
         if result["ok"]:
             img_url    = f"/mk-ai/static/generated/{result['filename']}"
-            reply_text = f"Here's your image: **{result['prompt']}**"
+            reply_text = (
+                f"✨ Here's your image!\n\n"
+                f"**Prompt used:** {result['prompt']}"
+            )
 
-            display_history_store[k].append({"role":"user",      "content": message})
+            display_history_store[k].append({"role":"user", "content": message})
             display_history_store[k].append({
                 "role": "assistant", "content": reply_text,
                 "image_url": img_url, "type": "image",
@@ -476,7 +531,7 @@ def chat_session():
             })
         else:
             # Fall through to chat if image gen failed
-            message = f"I tried to generate an image of '{message}' but encountered an error. Let me describe it for you instead:\n\n" + message
+            message = f"I tried to generate an image but the service returned an error. Let me describe it instead: {message}"
             intent  = "chat"
 
     # ── Code / Chat ──────────────────────────────────────────────────────────
