@@ -135,19 +135,67 @@ def allowed_file(filename):
 
 INTENT_PROMPT = """You are an intent classifier for MK AI. Analyze the user message and classify it into exactly ONE of these intents:
 
-IMAGE_GEN  - The user wants to generate, create, draw, make, or produce any visual/image/picture/photo/artwork/design/logo/wallpaper/illustration. This includes requests in ANY language including Hindi (tasveer, foto, image bana, dikhao), Urdu, Hinglish, shortforms ("img", "pic", "generate", "bana de"), or vague creative requests like "cyberpunk city", "sunset landscape". Also includes "edit image", "make a background", "create a logo", "design banao", "ek image chahiye".
+IMAGE_GEN  - The user wants to GENERATE / CREATE / DRAW / MAKE a visual image, picture, photo, artwork, logo, wallpaper, or illustration. Works in ANY language: Hindi (tasveer bana, foto bana, image banao, dikhao), Urdu, Hinglish, shortforms ("img", "pic", "bana de"), or descriptive scene requests like "cyberpunk city", "sunset landscape", "ek lion ka photo".
 
 CODE       - The user wants code written, debugged, explained, or optimized. Programming help, scripts, functions, algorithms, or technical implementation.
 
-CHAT       - Everything else: casual conversation, questions, explanations, analysis, writing, math, greetings, etc.
+CHAT       - Everything else: casual conversation, questions, explanations, writing, math, greetings, asking for TEXT prompts, etc.
 
-RULES:
-- If the message is just a greeting like "hi", "hello", "hey", "kya haal", respond CHAT — do NOT treat greetings as IMAGE_GEN.
-- If there is ANY creative/visual request mixed in, choose IMAGE_GEN.
-- Respond with ONLY ONE WORD: IMAGE_GEN, CODE, or CHAT. Nothing else."""
+CRITICAL RULES — read carefully:
+1. If the user asks for a TEXT PROMPT (e.g. "write me a prompt", "give me an image prompt", "prompt do", "prompt likhke do") → CHAT. They want text, not an actual image.
+2. Greetings like "hi", "hello", "hey", "kya haal", "kaise ho" → CHAT. Never IMAGE_GEN.
+3. Asking ABOUT images (e.g. "what makes a good image?", "image kya hota hai") → CHAT.
+4. Wanting an ACTUAL image/picture generated → IMAGE_GEN.
+5. Respond with ONLY ONE WORD: IMAGE_GEN, CODE, or CHAT. Nothing else."""
+
+
+# Multilingual image keywords — covers English, Hindi, Hinglish, Urdu, shortforms
+_IMG_KW = [
+    # English action words
+    "generate image","create image","make image","draw ","paint ","render ",
+    "make me a picture","make a picture","create a picture",
+    "image of ","picture of ","photo of ","illustration of ","artwork of ",
+    "a painting of","make a logo","design a logo","create a logo","make a wallpaper",
+    "generate a","create a ","make a ", "make an ",
+    # Hindi / Hinglish / Urdu
+    "tasveer bana","tasveer banao","tasveer de","tasveer dikhao",
+    "photo bana","photo banao","photo de","photo dikhao","photo kar",
+    "image bana","image banao","image de","image dikhao",
+    "pic bana","pic banao","pic de",
+    "foto bana","foto banao","foto de",
+    "draw kar","paint kar","bana do","bana de","bana kar","banado","banade",
+    "ek tasveer","ek photo","ek image","ek pic","ek foto",
+    "mujhe image","mujhe photo","mujhe tasveer","mujhe pic",
+    "dikhao image","dikhao photo","dikha","generate kar","create kar",
+    # Shortforms
+    " img "," img\n","img bana","img de","make img","create img","generate img",
+    "wallpaper bana","wallpaper banao","logo bana","logo banao",
+    "art bana","artwork bana","sketch bana","poster bana",
+]
+# Words that confirm it's a PROMPT TEXT request, not image generation
+_PROMPT_KW = [
+    "write a prompt","give me a prompt","write me a prompt",
+    "prompt likhke","prompt do","prompt de","prompt chahiye",
+    "image prompt","midjourney prompt","dall-e prompt","stable diffusion prompt",
+    "create a prompt","generate a prompt",
+]
+# Greetings that should never trigger image gen
+_GREET = {"hi","hello","hey","hii","helo","howdy","sup","yo","hola","salaam","namaste","namaskar"}
 
 def detect_intent(message):
-    """AI-powered intent detection that understands any language or shortform."""
+    """Hybrid AI + keyword intent detection."""
+    lower = message.lower().strip()
+
+    # Hard guard: pure greeting → always chat
+    if lower in _GREET or (len(lower.split()) <= 2 and lower.split()[0] in _GREET):
+        return "chat"
+
+    # Hard guard: asking for prompt text → always chat
+    for kw in _PROMPT_KW:
+        if kw in lower:
+            return "chat"
+
+    # Try AI classifier first
     try:
         resp = groq_client.chat.completions.create(
             model=MODEL_CHAT,
@@ -158,24 +206,24 @@ def detect_intent(message):
             max_tokens=10,
             temperature=0,
         )
-        intent = resp.choices[0].message.content.strip().upper()
-        if "IMAGE" in intent:
+        ai_result = resp.choices[0].message.content.strip().upper()
+        if "IMAGE" in ai_result:
             return "image_gen"
-        if "CODE" in intent:
+        if "CODE" in ai_result:
             return "code"
-        return "chat"
-    except:
-        # Fallback to keyword check if AI call fails
-        lower = message.lower()
-        img_kw = ["generate","create image","draw","paint","tasveer","foto","bana","image","picture","photo","img","pic","wallpaper","logo","artwork","illustration","design"]
-        for kw in img_kw:
-            if kw in lower and not lower.strip() in ["hi","hello","hey","hii","helo"]:
-                # Quick false-positive guard: single word greetings
-                words = lower.split()
-                if len(words) < 2 and words[0] in ["hi","hello","hey","hii"]:
-                    return "chat"
+        # AI said CHAT — do one more keyword safety pass before accepting
+        for kw in _IMG_KW:
+            if kw in lower:
                 return "image_gen"
         return "chat"
+    except:
+        pass
+
+    # Full fallback: keyword only
+    for kw in _IMG_KW:
+        if kw in lower:
+            return "image_gen"
+    return "chat"
 
 
 ENHANCE_PROMPT = """You are an expert AI image prompt engineer. Your job is to take any user request (in ANY language, shortform, slang, or incomplete description) and convert it into a rich, detailed, high-quality English image generation prompt for Stable Diffusion / Flux / Pollinations AI.
@@ -509,10 +557,7 @@ def chat_session():
         result = generate_image_from_prompt(message)
         if result["ok"]:
             img_url    = f"/mk-ai/static/generated/{result['filename']}"
-            reply_text = (
-                f"✨ Here's your image!\n\n"
-                f"**Prompt used:** {result['prompt']}"
-            )
+            reply_text = "✨ Here's your image!"
 
             display_history_store[k].append({"role":"user", "content": message})
             display_history_store[k].append({

@@ -610,7 +610,7 @@ async function sendMessage() {
     if (d.error) {
       appendMsg('assistant', '⚠️ Error: ' + d.error);
     } else if (d.type === 'image') {
-      appendMsg('assistant', d.reply, d.image_url, d.image_filename);
+      appendMsg('assistant', d.reply, d.image_url, d.image_filename, false, {originalMsg: text});
     } else {
       appendMsg('assistant', d.reply);
       if (ttsEnabled) speak(d.reply);
@@ -630,32 +630,38 @@ function chip(text) {
 }
 
 // ─── Append Message ────────────────────────────────────────────────────────
-function appendMsg(role, content, imageUrl, imageFilename, noAnimate) {
+function appendMsg(role, content, imageUrl, imageFilename, noAnimate, extraData) {
   const wrap = document.getElementById('msgs-inner');
   const div  = document.createElement('div');
-  div.className = 'msg ' + role + (noAnimate ? '' : '');
+  div.className = 'msg ' + role;
 
   const av = role === 'user'
     ? `<div class="m-avatar usr">${USERNAME[0].toUpperCase()}</div>`
     : `<div class="m-avatar ai">MK</div>`;
 
-  const bub = content
-    ? `<div class="bubble">${role === 'assistant' ? md(content) : esc(content)}</div>`
-    : '';
-
+  // For image messages: show ONLY the image card (no text bubble)
   let imgH = '';
   if (imageUrl) {
+    const dlName = imageFilename || 'mk-ai-image.jpg';
     imgH = `
       <div class="msg-img">
-        <img src="${imageUrl}" alt="Generated" loading="lazy" onclick="openLightbox('${imageUrl}')">
+        <img src="${imageUrl}" alt="Generated image" loading="lazy" onclick="openLightbox('${imageUrl}')">
         <div class="img-actions">
-          <a class="btn-dl" href="${imageUrl}" download="${imageFilename||'image.jpg'}">&#11015; Download</a>
+          <a class="btn-dl" href="${imageUrl}" download="${dlName}">&#11015; Download</a>
+          <button class="btn-dl" onclick="regenerateImg(this)" data-prompt="${esc(extraData && extraData.originalMsg || '')}">&#8635; Regenerate</button>
         </div>
       </div>`;
   }
 
+  // Text bubble — skip for image-only replies
+  const isImageReply = imageUrl && (!content || content === '✨ Here\'s your image!');
+  const bub = (!isImageReply && content)
+    ? `<div class="bubble">${role === 'assistant' ? md(content) : esc(content)}</div>`
+    : '';
+
+  // Speak button for text replies only
   let speakBtn = '';
-  if (role === 'assistant' && content) {
+  if (role === 'assistant' && content && !isImageReply) {
     const id = 'spk_' + Math.random().toString(36).slice(2,8);
     speakBtn = `<button class="speak-btn" id="${id}" onclick="speakThis('${id}',${JSON.stringify(content)})" title="Listen">&#128266;</button>`;
   }
@@ -810,6 +816,33 @@ function speakThis(btnId, text) {
     utt.onend = () => btn.classList.remove('speaking');
     utt.onerror = () => btn.classList.remove('speaking');
     window.speechSynthesis.speak(utt);
+  }
+}
+
+// ─── Regenerate Image ─────────────────────────────────────────────────────
+async function regenerateImg(btn) {
+  const originalMsg = btn.dataset.prompt || 'generate a beautiful image';
+  btn.disabled = true;
+  btn.textContent = '⏳ Generating...';
+  showTyping(); isBusy = true;
+  try {
+    const r = await fetch(BASE + '/chat/session', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message: originalMsg, session_id: currentSid})
+    });
+    const d = await r.json();
+    hideTyping(); isBusy = false;
+    if (d.type === 'image') {
+      appendMsg('assistant', d.reply, d.image_url, d.image_filename, false, {originalMsg});
+    } else {
+      appendMsg('assistant', d.reply || '⚠️ Could not regenerate.');
+    }
+    loadConversations();
+  } catch(e) {
+    hideTyping(); isBusy = false;
+    btn.disabled = false;
+    btn.textContent = '⟳ Regenerate';
   }
 }
 
