@@ -1,0 +1,6 @@
+flask
+groq
+pillow
+requests
+flask-session
+werkzeug
