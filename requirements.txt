@@ -1,4 +1,6 @@
 flask
 groq
-gunicorn
+pillow
 requests
+flask-session
+werkzeug
