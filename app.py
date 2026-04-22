@@ -449,4 +449,166 @@ def chat_page():
     return render_template("chat.html", username=session.get("username","User"))
 
 
-# ──
+# ─── Conversations API ────────────────────────────────────────────────────────
+@app.route("/mk-ai/conversations", methods=["GET"])
+@login_required
+def get_conversations():
+    uid    = session["user_id"]
+    prefix = f"{uid}_"
+    result = []
+    for key, history in display_history_store.items():
+        if not key.startswith(prefix):
+            continue
+        sid   = key[len(prefix):]
+        msgs  = [m for m in history if m["role"] == "user"]
+        title = (msgs[0]["content"][:55] + "...") if msgs and len(msgs[0]["content"])>55 else (msgs[0]["content"] if msgs else "New Chat")
+        result.append({"id": sid, "title": title, "count": len(history)})
+    result.sort(key=lambda x: x["count"], reverse=True)
+    return jsonify(result)
+
+
+@app.route("/mk-ai/conversations", methods=["POST"])
+@login_required
+def create_conversation():
+    return jsonify({"id": uuid.uuid4().hex})
+
+
+@app.route("/mk-ai/conversations/<sid>", methods=["DELETE"])
+@login_required
+def delete_conversation(sid):
+    k = user_key(sid)
+    conversations_store.pop(k, None)
+    display_history_store.pop(k, None)
+    return jsonify({"ok": True})
+
+
+@app.route("/mk-ai/conversations/<sid>/messages", methods=["GET"])
+@login_required
+def conversation_messages(sid):
+    return jsonify(display_history_store.get(user_key(sid), []))
+
+
+# ─── File Upload (images/media) ───────────────────────────────────────────────
+@app.route("/mk-ai/upload", methods=["POST"])
+@login_required
+def upload_file():
+    if "file" not in request.files:
+        return jsonify({"error": "No file"}), 400
+    f = request.files["file"]
+    if not f.filename or not allowed_file(f.filename):
+        return jsonify({"error": "File type not allowed"}), 400
+
+    fname = f"upl_{uuid.uuid4().hex[:12]}_{secure_filename(f.filename)}"
+    fpath = os.path.join(UPL_DIR, fname)
+    f.save(fpath)
+
+    # Convert to base64 data URL for Groq Vision
+    with open(fpath, "rb") as fh:
+        import base64
+        ext = fname.rsplit(".", 1)[-1].lower()
+        mime = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png",
+                "gif": "gif", "webp": "webp"}.get(ext, "jpeg")
+        b64  = base64.b64encode(fh.read()).decode()
+        data_url = f"data:image/{mime};base64,{b64}"
+
+    return jsonify({
+        "ok": True,
+        "filename": fname,
+        "url": f"/mk-ai/static/uploads/{fname}",
+        "data_url": data_url
+    })
+
+
+# ─── Main Chat Endpoint ───────────────────────────────────────────────────────
+@app.route("/mk-ai/chat/session", methods=["POST"])
+@login_required
+def chat_session():
+    data     = request.get_json(silent=True) or {}
+    message  = (data.get("message") or "").strip()
+    sid      = data.get("session_id") or uuid.uuid4().hex
+    img_data = data.get("image_data")   # base64 data URL (from upload endpoint)
+
+    if not message and not img_data:
+        return jsonify({"error": "Message or image required"}), 400
+
+    k = user_key(sid)
+    if k not in conversations_store:
+        conversations_store[k]   = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if k not in display_history_store:
+        display_history_store[k] = []
+
+    # ── Vision (image uploaded) ──────────────────────────────────────────────
+    if img_data:
+        question = message or "Describe this image in full detail. What do you see?"
+        reply    = analyze_image(img_data, question)
+
+        display_history_store[k].append({"role":"user",      "content": message or "📷 Image attached", "has_image": True})
+        display_history_store[k].append({"role":"assistant", "content": reply})
+        conversations_store[k].append({"role":"user",      "content": f"[Image provided] {question}"})
+        conversations_store[k].append({"role":"assistant", "content": reply})
+
+        return jsonify({"reply": reply, "type": "text", "session_id": sid})
+
+    # ── Detect intent ────────────────────────────────────────────────────────
+    intent = detect_intent(message)
+
+    # ── Image generation ─────────────────────────────────────────────────────
+    if intent == "image_gen":
+        result = generate_image_from_prompt(message)
+        if result["ok"]:
+            img_url    = f"/mk-ai/static/generated/{result['filename']}"
+            reply_text = "✨ Here's your image!"
+
+            display_history_store[k].append({"role":"user", "content": message})
+            display_history_store[k].append({
+                "role": "assistant", "content": reply_text,
+                "image_url": img_url, "type": "image",
+                "image_filename": result["filename"]
+            })
+            conversations_store[k].append({"role":"user",      "content": message})
+            conversations_store[k].append({"role":"assistant", "content": reply_text})
+
+            return jsonify({
+                "reply": reply_text, "type": "image",
+                "image_url": img_url,
+                "image_filename": result["filename"],
+                "session_id": sid
+            })
+        else:
+            # Fall through to chat if image gen failed
+            message = f"I tried to generate an image but the service returned an error. Let me describe it instead: {message}"
+            intent  = "chat"
+
+    # ── Code / Chat ──────────────────────────────────────────────────────────
+    model = MODEL_CODE if intent == "code" else MODEL_CHAT
+    conversations_store[k].append({"role": "user", "content": message})
+
+    reply, err = chat_with_groq(conversations_store[k], model)
+    if err:
+        conversations_store[k].pop()
+        return jsonify({"error": f"AI error: {err}"}), 500
+
+    conversations_store[k].append({"role": "assistant", "content": reply})
+    display_history_store[k].append({"role": "user",      "content": message})
+    display_history_store[k].append({"role": "assistant", "content": reply})
+
+    return jsonify({"reply": reply, "type": "text", "session_id": sid, "model": model})
+
+
+# ─── Static file serving ──────────────────────────────────────────────────────
+@app.route("/mk-ai/static/generated/<filename>")
+def serve_generated(filename):
+    return send_from_directory(GEN_DIR, filename)
+
+@app.route("/mk-ai/static/uploads/<filename>")
+def serve_uploaded(filename):
+    return send_from_directory(UPL_DIR, filename)
+
+@app.route("/mk-ai/static/founder.jpg")
+def serve_founder():
+    return send_from_directory(os.path.join(BASE_DIR, "static"), "founder.jpg")
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 18330))
+    app.run(host="0.0.0.0", port=port, debug=False)
