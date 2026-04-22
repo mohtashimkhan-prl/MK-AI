@@ -376,8 +376,7 @@ def chat_with_groq(messages, model):
 #  ROUTES
 # ═══════════════════════════════════════════════════════════════════════
 
-@app.route("/mk-ai/")
-@app.route("/mk-ai")
+@app.route("/")
 def index():
     return redirect("/mk-ai/login" if "user_id" not in session else "/mk-ai/chat")
 
