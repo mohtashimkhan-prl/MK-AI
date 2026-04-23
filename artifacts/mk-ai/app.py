@@ -95,6 +95,7 @@ You are extraordinary. Give your absolute best — every single message, every s
 # ─── In-Memory Stores ────────────────────────────────────────────────────────
 conversations_store    = {}   # full history with system prompt
 display_history_store  = {}   # display history per user_session
+conversation_titles    = {}   # custom titles set by user
 
 
 # ─── DB Init ─────────────────────────────────────────────────────────────────
@@ -123,7 +124,7 @@ def login_required(f):
         if "user_id" not in session:
             if request.is_json or request.method == "POST":
                 return jsonify({"error": "Authentication required"}), 401
-            return redirect("/mk-ai/login")
+            return redirect("/login")
         return f(*args, **kwargs)
     return decorated
 
@@ -376,17 +377,16 @@ def chat_with_groq(messages, model):
 #  ROUTES
 # ═══════════════════════════════════════════════════════════════════════
 
-@app.route("/mk-ai/")
-@app.route("/mk-ai")
+@app.route("/")
 def index():
-    return redirect("/mk-ai/login" if "user_id" not in session else "/mk-ai/chat")
+    return redirect("/login" if "user_id" not in session else "/chat")
 
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
-@app.route("/mk-ai/login", methods=["GET", "POST"])
+@app.route("/login", methods=["GET", "POST"])
 def login():
     if "user_id" in session:
-        return redirect("/mk-ai/chat")
+        return redirect("/chat")
     error = None
     if request.method == "POST":
         username = request.form.get("username","").strip()
@@ -400,15 +400,15 @@ def login():
         if row and check_password_hash(row[2], password):
             session["user_id"]  = row[0]
             session["username"] = row[1]
-            return redirect("/mk-ai/chat", code=303)
+            return redirect("/chat", code=303)
         error = "Wrong username or password."
     return render_template("login.html", error=error)
 
 
-@app.route("/mk-ai/register", methods=["GET", "POST"])
+@app.route("/register", methods=["GET", "POST"])
 def register():
     if "user_id" in session:
-        return redirect("/mk-ai/chat")
+        return redirect("/chat")
     error = None
     if request.method == "POST":
         username = request.form.get("username","").strip()
@@ -430,27 +430,27 @@ def register():
                 conn.close()
                 session["user_id"]  = uid
                 session["username"] = username
-                return redirect("/mk-ai/chat", code=303)
+                return redirect("/chat", code=303)
             except sqlite3.IntegrityError:
                 error = "Username or email already taken."
     return render_template("register.html", error=error)
 
 
-@app.route("/mk-ai/logout")
+@app.route("/logout")
 def logout():
     session.clear()
-    return redirect("/mk-ai/login")
+    return redirect("/login")
 
 
 # ─── Chat page ────────────────────────────────────────────────────────────────
-@app.route("/mk-ai/chat")
+@app.route("/chat")
 @login_required
 def chat_page():
     return render_template("chat.html", username=session.get("username","User"))
 
 
 # ─── Conversations API ────────────────────────────────────────────────────────
-@app.route("/mk-ai/conversations", methods=["GET"])
+@app.route("/conversations", methods=["GET"])
 @login_required
 def get_conversations():
     uid    = session["user_id"]
@@ -459,37 +459,53 @@ def get_conversations():
     for key, history in display_history_store.items():
         if not key.startswith(prefix):
             continue
-        sid   = key[len(prefix):]
-        msgs  = [m for m in history if m["role"] == "user"]
-        title = (msgs[0]["content"][:55] + "...") if msgs and len(msgs[0]["content"])>55 else (msgs[0]["content"] if msgs else "New Chat")
+        sid = key[len(prefix):]
+        # Custom title takes priority
+        if key in conversation_titles:
+            title = conversation_titles[key]
+        else:
+            msgs  = [m for m in history if m["role"] == "user"]
+            title = (msgs[0]["content"][:55] + "...") if msgs and len(msgs[0]["content"])>55 else (msgs[0]["content"] if msgs else "New Chat")
         result.append({"id": sid, "title": title, "count": len(history)})
     result.sort(key=lambda x: x["count"], reverse=True)
     return jsonify(result)
 
 
-@app.route("/mk-ai/conversations", methods=["POST"])
+@app.route("/conversations", methods=["POST"])
 @login_required
 def create_conversation():
     return jsonify({"id": uuid.uuid4().hex})
 
 
-@app.route("/mk-ai/conversations/<sid>", methods=["DELETE"])
+@app.route("/conversations/<sid>", methods=["DELETE"])
 @login_required
 def delete_conversation(sid):
     k = user_key(sid)
     conversations_store.pop(k, None)
     display_history_store.pop(k, None)
+    conversation_titles.pop(k, None)
     return jsonify({"ok": True})
 
 
-@app.route("/mk-ai/conversations/<sid>/messages", methods=["GET"])
+@app.route("/conversations/<sid>/rename", methods=["POST"])
+@login_required
+def rename_conversation(sid):
+    data = request.get_json(silent=True) or {}
+    new_title = (data.get("title") or "").strip()[:80]
+    if not new_title:
+        return jsonify({"error": "Title required"}), 400
+    conversation_titles[user_key(sid)] = new_title
+    return jsonify({"ok": True, "title": new_title})
+
+
+@app.route("/conversations/<sid>/messages", methods=["GET"])
 @login_required
 def conversation_messages(sid):
     return jsonify(display_history_store.get(user_key(sid), []))
 
 
 # ─── File Upload (images/media) ───────────────────────────────────────────────
-@app.route("/mk-ai/upload", methods=["POST"])
+@app.route("/upload", methods=["POST"])
 @login_required
 def upload_file():
     if "file" not in request.files:
@@ -514,13 +530,13 @@ def upload_file():
     return jsonify({
         "ok": True,
         "filename": fname,
-        "url": f"/mk-ai/static/uploads/{fname}",
+        "url": f"/static/uploads/{fname}",
         "data_url": data_url
     })
 
 
 # ─── Main Chat Endpoint ───────────────────────────────────────────────────────
-@app.route("/mk-ai/chat/session", methods=["POST"])
+@app.route("/chat/session", methods=["POST"])
 @login_required
 def chat_session():
     data     = request.get_json(silent=True) or {}
@@ -539,12 +555,69 @@ def chat_session():
 
     # ── Vision (image uploaded) ──────────────────────────────────────────────
     if img_data:
-        question = message or "Describe this image in full detail. What do you see?"
+        # Detect EDIT vs ANALYZE intent
+        edit_keywords = [
+            "add ","remove ","change ","make him","make her","make it","wear","wearing","put a",
+            "edit","modify","replace","convert","turn into","transform","make this",
+            "add a","add an","give him","give her","without","with a","with an",
+            "lagao","laga do","pehna do","pehnao","add kar","change kar","badal","hata",
+            "edit kar","modify kar","wear kara","wear kar","banao",
+            "background","color","style","make me","cartoon","anime","realistic","painting",
+        ]
+        is_edit = any(kw in message.lower() for kw in edit_keywords) if message else False
+
+        if is_edit:
+            # EDIT FLOW: vision describes → AI builds new prompt → Pollinations generates
+            description = analyze_image(
+                img_data,
+                "Describe this image in 2-3 sentences focusing on the main subject, "
+                "their appearance, pose, clothing, and setting. Be precise."
+            )
+            # Build edit prompt
+            try:
+                edit_resp = groq_client.chat.completions.create(
+                    model=MODEL_CHAT,
+                    messages=[
+                        {"role": "system", "content":
+                            "You are an image edit prompt builder. Given a description of an image and "
+                            "an edit instruction, produce ONE detailed English prompt for a text-to-image "
+                            "AI that recreates the original scene WITH the edit applied. "
+                            "Add quality tags: 'highly detailed, 8k, photorealistic'. Output ONLY the prompt."},
+                        {"role": "user", "content":
+                            f"ORIGINAL IMAGE: {description}\n\nEDIT REQUEST: {message}\n\nNew prompt:"}
+                    ],
+                    max_tokens=200, temperature=0.7,
+                )
+                edit_prompt = edit_resp.choices[0].message.content.strip()
+            except:
+                edit_prompt = f"{description}, {message}, highly detailed, 8k, photorealistic"
+
+            result = generate_image_from_prompt(edit_prompt)
+            if result["ok"]:
+                img_url = f"/static/generated/{result['filename']}"
+                reply_text = "✨ Here's your edited image!"
+                display_history_store[k].append({"role":"user", "content": message or "📷 Image attached", "has_image": True})
+                display_history_store[k].append({
+                    "role":"assistant", "content": reply_text,
+                    "image_url": img_url, "type": "image",
+                    "image_filename": result["filename"]
+                })
+                conversations_store[k].append({"role":"user", "content": f"[Image edited: {message}]"})
+                conversations_store[k].append({"role":"assistant", "content": reply_text})
+                return jsonify({
+                    "reply": reply_text, "type": "image",
+                    "image_url": img_url,
+                    "image_filename": result["filename"],
+                    "session_id": sid
+                })
+
+        # ANALYZE FLOW (default)
+        question = message or "Describe this image in detail. What do you see?"
         reply    = analyze_image(img_data, question)
 
-        display_history_store[k].append({"role":"user",      "content": message or "📷 Image attached", "has_image": True})
+        display_history_store[k].append({"role":"user", "content": message or "📷 Image attached", "has_image": True})
         display_history_store[k].append({"role":"assistant", "content": reply})
-        conversations_store[k].append({"role":"user",      "content": f"[Image provided] {question}"})
+        conversations_store[k].append({"role":"user", "content": f"[Image provided] {question}"})
         conversations_store[k].append({"role":"assistant", "content": reply})
 
         return jsonify({"reply": reply, "type": "text", "session_id": sid})
@@ -556,7 +629,7 @@ def chat_session():
     if intent == "image_gen":
         result = generate_image_from_prompt(message)
         if result["ok"]:
-            img_url    = f"/mk-ai/static/generated/{result['filename']}"
+            img_url    = f"/static/generated/{result['filename']}"
             reply_text = "✨ Here's your image!"
 
             display_history_store[k].append({"role":"user", "content": message})
@@ -596,15 +669,15 @@ def chat_session():
 
 
 # ─── Static file serving ──────────────────────────────────────────────────────
-@app.route("/mk-ai/static/generated/<filename>")
+@app.route("/static/generated/<filename>")
 def serve_generated(filename):
     return send_from_directory(GEN_DIR, filename)
 
-@app.route("/mk-ai/static/uploads/<filename>")
+@app.route("/static/uploads/<filename>")
 def serve_uploaded(filename):
     return send_from_directory(UPL_DIR, filename)
 
-@app.route("/mk-ai/static/founder.jpg")
+@app.route("/static/founder.jpg")
 def serve_founder():
     return send_from_directory(os.path.join(BASE_DIR, "static"), "founder.jpg")
 

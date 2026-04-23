@@ -1,24 +1,25 @@
 kind = "web"
-previewPath = "/mk-ai/"
-title = "MK AI"
-version = "1.0.0"
-id = "artifacts/mk-ai"
-router = "path"
+  previewPath = "/"
+  title = "MK AI"
+  version = "1.0.0"
+  id = "artifacts/mk-ai"
+  router = "path"
 
-[[integratedSkills]]
-name = "react-vite"
-version = "1.0.0"
+  [[integratedSkills]]
+  name = "react-vite"
+  version = "1.0.0"
 
-[[services]]
-name = "web"
-paths = [ "/mk-ai" ]
-localPort = 18330
+  [[services]]
+  name = "web"
+  paths = [ "/" ]
+  localPort = 18330
 
-[services.development]
-run = "bash /home/runner/workspace/artifacts/mk-ai/run.sh"
+  [services.development]
+  run = "bash /home/runner/workspace/artifacts/mk-ai/run.sh"
 
-[services.production]
-run = "bash /home/runner/workspace/artifacts/mk-ai/run.sh"
+  [services.production]
+  run = "bash /home/runner/workspace/artifacts/mk-ai/run.sh"
 
-[services.env]
-PORT = "18330"
+  [services.env]
+  PORT = "18330"
+  

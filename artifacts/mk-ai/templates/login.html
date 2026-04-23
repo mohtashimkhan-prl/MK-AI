@@ -121,7 +121,7 @@
         {% if error %}
         <div class="error-msg">{{ error }}</div>
         {% endif %}
-        <form method="POST" action="/mk-ai/login">
+        <form method="POST" action="/login">
             <div class="form-group">
                 <label>Username</label>
                 <input type="text" name="username" placeholder="Enter your username" required autofocus>
@@ -133,7 +133,7 @@
             <button type="submit" class="btn-primary">Sign In</button>
         </form>
         <div class="auth-link">
-            Don't have an account? <a href="/mk-ai/register">Create one</a>
+            Don't have an account? <a href="/register">Create one</a>
         </div>
     </div>
 </div>
