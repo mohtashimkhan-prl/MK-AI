@@ -265,13 +265,16 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);displ
       <button class="btn-about" onclick="openAbout()">
         <span>&#9432;</span> About MK AI
       </button>
-      <div class="user-chip">
+      <button class="btn-about" onclick="openProfile()" id="profile-btn" style="margin-bottom:9px">
+        <span>&#128100;</span> My Profile
+      </button>
+      <div class="user-chip" onclick="openProfile()" style="cursor:pointer" title="Click to open your profile">
         <div class="u-avatar" id="u-av">{{ username[0]|upper }}</div>
         <div class="u-info">
           <div class="u-name">{{ username }}</div>
           <div class="u-plan">&#10022; Free Plan</div>
         </div>
-        <button class="btn-logout" onclick="logout()" title="Logout">&#x2715;</button>
+        <button class="btn-logout" onclick="event.stopPropagation();logout()" title="Logout">&#x2715;</button>
       </div>
     </div>
   </aside>
@@ -404,6 +407,77 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);displ
     </div>
   </div>
 </div>
+
+<!-- ──── PROFILE MODAL ──── -->
+<div class="modal-bg" id="profile-modal">
+  <div class="modal" style="max-width:520px">
+    <div class="m-hdr">
+      <div class="m-logo"><span class="mk">My</span><span class="ai"> Profile</span></div>
+      <button class="m-close" onclick="closeProfile()">&#x2715;</button>
+    </div>
+
+    <div class="prof-wrap">
+      <div class="prof-avatar-wrap">
+        <img id="prof-avatar-img" src="" alt="" style="display:none">
+        <div id="prof-avatar-letter" class="prof-avatar-letter">?</div>
+        <button class="prof-edit-btn" onclick="document.getElementById('avatar-input').click()" title="Change avatar">&#9998;</button>
+        <input type="file" id="avatar-input" accept="image/*" style="display:none" onchange="uploadAvatar(this)">
+      </div>
+
+      <div class="prof-name" id="prof-username">—</div>
+      <div class="prof-sub">MK AI Account</div>
+
+      <div class="prof-rows">
+        <div class="prof-row">
+          <span class="prof-k">Username</span>
+          <span class="prof-v" id="prof-username-2">—</span>
+        </div>
+        <div class="prof-row">
+          <span class="prof-k">Email</span>
+          <span class="prof-v" id="prof-email">—</span>
+        </div>
+        <div class="prof-row">
+          <span class="prof-k">Member since</span>
+          <span class="prof-v" id="prof-created">—</span>
+        </div>
+        <div class="prof-row">
+          <span class="prof-k">Total chats</span>
+          <span class="prof-v" id="prof-chats">0</span>
+        </div>
+        <div class="prof-row">
+          <span class="prof-k">Total messages</span>
+          <span class="prof-v" id="prof-msgs">0</span>
+        </div>
+      </div>
+
+      <div class="prof-note">
+        🔒 This is your private account. Only you can see this information.
+        Your chats are tied only to your account and reload automatically when you sign in.
+      </div>
+
+      <button class="prof-logout" onclick="logout()">Sign Out</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.prof-wrap{display:flex;flex-direction:column;align-items:center;gap:6px}
+.prof-avatar-wrap{position:relative;width:110px;height:110px;margin:6px 0 12px}
+.prof-avatar-letter{width:110px;height:110px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:46px;font-weight:700;text-transform:uppercase}
+#prof-avatar-img{width:110px;height:110px;border-radius:50%;object-fit:cover;border:3px solid var(--accent)}
+.prof-edit-btn{position:absolute;bottom:0;right:0;width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fff;border:3px solid var(--bg-2);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
+.prof-edit-btn:hover{background:var(--accent-hover)}
+.prof-name{font-size:22px;font-weight:700;color:var(--text-strong)}
+.prof-sub{color:var(--text-3);font-size:13px;margin-bottom:14px}
+.prof-rows{width:100%;background:var(--bg-3);border:1px solid var(--border);border-radius:12px;padding:6px 14px;margin:8px 0}
+.prof-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
+.prof-row:last-child{border-bottom:none}
+.prof-k{color:var(--text-3);font-size:13px}
+.prof-v{color:var(--text);font-size:13px;font-weight:500;text-align:right;max-width:60%;word-break:break-all}
+.prof-note{background:var(--bg-4);border:1px solid var(--border-2);border-radius:10px;padding:10px 14px;color:var(--text-2);font-size:12.5px;line-height:1.55;margin-top:6px;width:100%}
+.prof-logout{margin-top:14px;padding:11px 22px;background:transparent;color:#ef4444;border:1px solid #ef4444;border-radius:9px;cursor:pointer;font-weight:600;font-family:inherit;width:100%;font-size:14px}
+.prof-logout:hover{background:#ef4444;color:#fff}
+</style>
 
 <!-- Lightbox -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
@@ -920,6 +994,76 @@ function closeLightbox() {
 function openAbout() { document.getElementById('about-modal').classList.add('open'); }
 function closeAbout() { document.getElementById('about-modal').classList.remove('open'); }
 document.getElementById('about-modal').addEventListener('click', e => { if(e.target === e.currentTarget) closeAbout(); });
+
+// ─── Profile Modal ─────────────────────────────────────────────────────────
+async function openProfile() {
+  document.getElementById('profile-modal').classList.add('open');
+  try {
+    const r = await fetch(BASE + '/profile');
+    if (!r.ok) return;
+    const p = await r.json();
+    document.getElementById('prof-username').textContent   = p.username;
+    document.getElementById('prof-username-2').textContent = p.username;
+    document.getElementById('prof-email').textContent      = p.email || '—';
+    document.getElementById('prof-chats').textContent      = p.chat_count || 0;
+    document.getElementById('prof-msgs').textContent       = p.message_count || 0;
+    if (p.created_at) {
+      try { document.getElementById('prof-created').textContent = new Date(p.created_at).toLocaleDateString(); }
+      catch { document.getElementById('prof-created').textContent = p.created_at.split('T')[0]; }
+    }
+    setProfileAvatar(p.avatar_url, p.username);
+  } catch(e) { console.error(e); }
+}
+function closeProfile() { document.getElementById('profile-modal').classList.remove('open'); }
+document.getElementById('profile-modal').addEventListener('click', e => { if(e.target === e.currentTarget) closeProfile(); });
+
+function setProfileAvatar(url, username) {
+  const img = document.getElementById('prof-avatar-img');
+  const letter = document.getElementById('prof-avatar-letter');
+  const sidebarAv = document.getElementById('u-av');
+  if (url) {
+    const v = url + '?t=' + Date.now();
+    img.src = v;
+    img.style.display = 'block';
+    letter.style.display = 'none';
+    // also update sidebar chip
+    sidebarAv.innerHTML = `<img src="${v}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
+  } else {
+    img.style.display = 'none';
+    letter.style.display = 'flex';
+    letter.textContent = (username || '?')[0].toUpperCase();
+  }
+}
+
+async function uploadAvatar(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const r = await fetch(BASE + '/profile/avatar', { method: 'POST', body: fd });
+    const j = await r.json();
+    if (j.ok) {
+      setProfileAvatar(j.avatar_url, USERNAME);
+    } else {
+      alert(j.error || 'Avatar upload failed');
+    }
+  } catch (e) { alert('Upload failed: ' + e.message); }
+  input.value = '';
+}
+
+// Load avatar into sidebar chip on page load
+(async function loadSidebarAvatar(){
+  try {
+    const r = await fetch(BASE + '/profile');
+    if (!r.ok) return;
+    const p = await r.json();
+    if (p.avatar_url) {
+      const v = p.avatar_url + '?t=' + Date.now();
+      document.getElementById('u-av').innerHTML = `<img src="${v}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
+    }
+  } catch {}
+})();
 
 // ─── Markdown Renderer ─────────────────────────────────────────────────────
 function md(text) {

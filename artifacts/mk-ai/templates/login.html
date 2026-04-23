@@ -3,7 +3,7 @@
 
 {% block extra_styles %}
 <style>
-    body { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
+    body { display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 40px 0 80px; }
     .auth-container {
         width: 100%;
         max-width: 420px;
@@ -105,7 +105,7 @@
         font-weight: 500;
     }
     .auth-link a:hover { text-decoration: underline; }
-    .footer { position: fixed; bottom: 0; width: 100%; }
+    
 </style>
 {% endblock %}
 
@@ -136,5 +136,38 @@
             Don't have an account? <a href="/register">Create one</a>
         </div>
     </div>
+
+    <div class="privacy-card">
+        <div class="privacy-title">🔒 Your Privacy &amp; Security</div>
+        <ul class="privacy-list">
+            <li>The MK Community / MK Team <b>never makes your messages public</b>. Your chats stay private to you.</li>
+            <li>Your <b>account details</b> (username, email, password) are <b>fully secure</b> and never shared with anyone.</li>
+            <li>Every chat, image, and message is <b>tied only to your account</b> — no other user can ever see it.</li>
+            <li>Passwords are stored as one-way encrypted hashes — even MK AI staff cannot read them.</li>
+            <li>You can delete any chat anytime from the sidebar — it is permanently removed.</li>
+        </ul>
+    </div>
 </div>
+<style>
+.privacy-card {
+    margin-top: 22px;
+    background: #0f0f0f;
+    border: 1px solid #1e1e1e;
+    border-radius: 12px;
+    padding: 18px 22px;
+    max-width: 460px;
+    margin-left: auto;
+    margin-right: auto;
+}
+.privacy-title { color: #3b82f6; font-weight: 600; margin-bottom: 10px; font-size: 14px; }
+.privacy-list { list-style: none; padding: 0; margin: 0; }
+.privacy-list li {
+    color: #9ca3af; font-size: 12.5px; line-height: 1.6;
+    padding: 5px 0 5px 18px; position: relative;
+}
+.privacy-list li::before {
+    content: "✓"; color: #22c55e; position: absolute; left: 0; font-weight: 700;
+}
+.privacy-list b { color: #e5e7eb; font-weight: 600; }
+</style>
 {% endblock %}
